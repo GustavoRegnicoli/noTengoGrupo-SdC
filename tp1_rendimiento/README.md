@@ -96,3 +96,47 @@ al 7950X que cuesta más del doble.
 **En energía:** El **5900X** es el más eficiente energéticamente 
 con solo 105W de TDP. El 7950X consume 170W para lograr su mayor 
 rendimiento. El i5-13600K puede llegar a 181W bajo carga total.
+
+## Practico ESP32 - Variación de frecuencia
+
+### Consigna
+Ejecutar un código que demore alrededor de 10 segundos con dos 
+bucles: uno con sumas de enteros y otro con sumas de floats.
+Analizar qué sucede con el tiempo al variar la frecuencia del CPU.
+
+### Configuración
+- **Hardware:** ESP32 Dev Module
+- **Iteraciones:** 57.000.000 por bucle
+- **Frecuencias probadas:** 80, 160 y 240 MHz
+
+### Resultados
+
+| Frecuencia | Tiempo enteros | Tiempo floats |
+|------------|---------------|---------------|
+| 80 MHz | 10212 ms | 10212 ms |
+| 160 MHz | 5046 ms | 5046 ms |
+| 240 MHz | 3350 ms | 3350 ms |
+
+### Capturas
+![80MHz](rendimiento_esp/80MHz.png)
+![160MHz](rendimiento_esp/160MHz.png)
+![240MHz](rendimiento_esp/240MHz.png)
+
+### Speedup
+Tomando 80 MHz como base:
+
+| Comparación | Speedup |
+|-------------|---------|
+| 160 MHz vs 80 MHz | 10212 / 5046 = **2.02x** |
+| 240 MHz vs 80 MHz | 10212 / 3350 = **3.05x** |
+
+### Conclusiones
+- Al duplicar la frecuencia de 80 a 160 MHz el tiempo se reduce 
+  a casi la mitad, con un speedup de **2.02x**
+- Al triplicar la frecuencia de 80 a 240 MHz el tiempo se reduce 
+  a un tercio, con un speedup de **3.05x**
+- Los tiempos de enteros y floats son prácticamente iguales, 
+  lo que indica que el ESP32 tiene una **unidad de punto flotante 
+  (FPU) por hardware** que procesa floats igual de rápido que enteros
+- La relación entre frecuencia y tiempo es **lineal y directa**: 
+  a mayor frecuencia, menor tiempo de ejecución de forma proporcional
