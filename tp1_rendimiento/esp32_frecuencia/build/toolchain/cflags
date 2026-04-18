@@ -1,0 +1,6 @@
+-Wno-frame-address
+-mlongcalls
+-fno-builtin-memcpy
+-fno-builtin-memset
+-fno-builtin-bzero
+"-specs=/home/gustavo/noTengoGrupo-SdC/tp1_rendimiento/esp32_frecuencia/build/specs/picolibc.specs"
