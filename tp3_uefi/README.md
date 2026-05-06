@@ -1,4 +1,4 @@
-# Práctico 3A - UEFI
+# Práctico 3a - UEFI
 ## Sistemas de Computación - UNC 2026
 
 ## Integrantes
@@ -13,7 +13,7 @@
 UEFI (Unified Extensible Firmware Interface) es la infraestructura
 de firmware estándar que reemplaza al antiguo BIOS. A diferencia
 del BIOS que operaba en 16 bits con un límite de 1MB de memoria,
-UEFI ofrece una arquitectura moderna de 64 bits con soporte para
+UEFI ofrece una arquitectura de 64 bits con soporte para
 discos grandes, red, sistema de archivos FAT32 y Secure Boot.
 
 ### Diferencias con el práctico anterior
@@ -42,42 +42,54 @@ Se instalaron las siguientes dependencias:
 
 ---
 
-## Parte 1 - Exploración de la Shell UEFI
+## Parte 1
 
 Se arrancó QEMU con firmware UEFI usando OVMF:
 
     qemu-system-x86_64 -m 512 -bios /usr/share/ovmf/OVMF.fd -net none
 
 ### Comando map
-[📸 CAPTURA]
+
 Muestra los dispositivos disponibles. UEFI no usa letras de
 unidad fijas sino Handles que agrupan Protocolos — interfaces
 estándar independientes del hardware físico.
 
-**Respuesta Pregunta 1:** El modelo de protocolos abstrae el
+![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-26-01.png)
+![2](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-26-24.png)
+
+
+**Pregunta de Razonamiento 1:** Al ejecutar el comando map y dh, vemos protocolos e identificadores en lugar de puertos de hardware fijos. ¿Cuál es la ventaja de seguridad y compatibilidad de este modelo frente al antiguo BIOS?
+
+**Respuesta:** El modelo de protocolos abstrae el
 hardware físico. Un binario puede interactuar con un disco sin
 saber si está conectado por SATA, USB o PCIe, usando siempre
 la misma API estándar. Esto previene conflictos y facilita
 el desarrollo seguro.
 
 ### Comando dh -b
-[📸 CAPTURA]
+
 Muestra la base de datos de Handles y Protocolos del sistema.
+![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-27-38.png)
+
 
 ### Comando memmap -b
-[📸 CAPTURA]
+
 Muestra el mapa de memoria. Las regiones RuntimeServicesCode
 son críticas para la seguridad.
 
-**Respuesta Pregunta 3:** La memoria RuntimeServices no se borra
+**Pregunta de Razonamiento 3:** En el mapa de memoria (memmap), existen regiones marcadas como RuntimeServicesCode. ¿Por qué estas áreas son un objetivo principal para los desarrolladores de malware (Bootkits)?
+
+**Respuesta** La memoria RuntimeServices no se borra
 cuando el SO toma el control. Un Bootkit inyectado ahí opera
 con privilegios Ring -2/SMM invisible para cualquier antivirus.
 
 ### Variables NVRAM - dmpstore
-[📸 CAPTURA]
+
 Muestra variables Boot0000, BootOrder que controlan el arranque.
 
-**Respuesta Pregunta 2:** El Boot Manager lee BootOrder
+**Pregunta de Razonamiento 2:** Observando las variables Boot#### y BootOrder, ¿cómo determina el Boot Manager la secuencia de arranque?
+
+**Respuesta :** El Boot Manager lee BootOrder
 (ej: 0000, 0002) y busca la variable Boot0000 que contiene
 la ruta del .efi a ejecutar.
 
@@ -98,7 +110,9 @@ La aplicación es un Hello World nativo UEFI que:
 2. Crea un byte con valor 0xCC (opcode de INT3 = breakpoint)
 3. Verifica si el byte es 0xCC e imprime un segundo mensaje
 
-**Respuesta Pregunta 4:** No existe printf porque en el entorno
+**Pregunta de Razonamiento 4:** ¿Por qué utilizamos SystemTable->ConOut->OutputString en lugar de la función printf de C?
+
+**Respuesta** No existe printf porque en el entorno
 pre-OS de UEFI no hay sistema operativo ni libc. Toda la E/S
 se hace a través de protocolos de la SystemTable.
 
@@ -160,7 +174,7 @@ Convierte al formato PE/COFF que usa UEFI.
 
     file aplicacion.efi
 
-[📸 CAPTURA - debe decir PE32+ executable EFI application]
+
 
 **¿Qué es PE/COFF?** Es el formato de ejecutable de Windows.
 UEFI lo usa aunque compilemos desde Linux porque es portable.
@@ -186,8 +200,6 @@ Se ejecutó QEMU con firmware UEFI:
         -drive format=raw,file=disco.img,if=virtio \
         -net none
 
-[📸 CAPTURA DE LA SHELL UEFI ARRANCANDO]
-
 ### Ejecución del HelloWorld.efi del repositorio
 
 Se utilizó el HelloWorld.efi del repositorio UEFI-Lessons
@@ -196,8 +208,7 @@ del entorno:
 
     fs0:
     HelloWorld.efi
-
-[📸 CAPTURA DEL RESULTADO DE HelloWorld.efi]
+![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-06%2002-41-13.png)
 
 ### Problema con aplicacion.efi compilada con gnu-efi
 
@@ -217,7 +228,9 @@ entorno de emulación específico.
 
 ## Análisis de seguridad
 
-**Respuesta Pregunta 5:** El compilador interpreta char como
+**Pregunta de Razonamiento 5:** En el pseudocódigo de Ghidra, la condición 0xCC suele aparecer como -52. ¿A qué se debe este fenómeno y por qué importa en ciberseguridad?
+
+**Respuesta** El compilador interpreta char como
 entero con signo. En complemento a dos de 8 bits, 0xCC (204)
 equivale a -52. Esto es crítico en ciberseguridad porque una
 regla YARA que busque 204 fallaría — hay que buscar el byte
