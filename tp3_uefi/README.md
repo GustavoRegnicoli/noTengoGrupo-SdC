@@ -3,8 +3,8 @@
 
 ## Integrantes
 - Bernardi Mateo
-- Regnicoli Gustavo
 - Schreiner Federico
+- Regnicoli Gustavo
 
 ---
 
@@ -26,6 +26,12 @@ discos grandes, red, sistema de archivos FAT32 y Secure Boot.
 | Sin interfaz gráfica | Con shell interactiva |
 | Sin Secure Boot | Con Secure Boot |
 
+### Fases de arranque UEFI
+- **SEC** → fase pre-memoria, establece confianza inicial
+- **PEI** → inicializa RAM y chipset
+- **DXE** → carga drivers, inicializa hardware completo
+- **BDS** → decide qué bootear leyendo variables NVRAM
+- **Runtime** → el SO toma control, quedan servicios UEFI activos
 ---
 
 ## Preparación del entorno
@@ -42,40 +48,41 @@ Se instalaron las siguientes dependencias:
 
 ---
 
-## Parte 1
+## Parte 1 - Exploración de la Shell UEFI
 
-Se arrancó QEMU con firmware UEFI usando OVMF:
+Se arrancó QEMU con firmware UEFI:
 
     qemu-system-x86_64 -m 512 -bios /usr/share/ovmf/OVMF.fd -net none
 
-### Comando map
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/b1b661af-9a83-4913-8938-00ea511a2be7" />
 
-Muestra los dispositivos disponibles. UEFI no usa letras de
-unidad fijas sino Handles que agrupan Protocolos — interfaces
-estándar independientes del hardware físico.
+### map — Dispositivos disponibles
 
-![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-26-01.png)
-![2](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-26-24.png)
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/b8ced45f-98d6-40f2-8a35-0695ad197923" />
 
+
+UEFI no usa letras de unidad fijas. Usa Handles que agrupan
+Protocolos — interfaces estándar independientes del hardware.
 
 **Pregunta de Razonamiento 1:** Al ejecutar el comando map y dh, vemos protocolos e identificadores en lugar de puertos de hardware fijos. ¿Cuál es la ventaja de seguridad y compatibilidad de este modelo frente al antiguo BIOS?
 
-**Respuesta:** El modelo de protocolos abstrae el
-hardware físico. Un binario puede interactuar con un disco sin
-saber si está conectado por SATA, USB o PCIe, usando siempre
-la misma API estándar. Esto previene conflictos y facilita
-el desarrollo seguro.
+**Respuesta:** El firmware puede interactuar con un disco sin saber si está
+conectado por SATA, USB o PCIe — usa siempre la misma API.
+Esto previene conflictos y facilita el desarrollo seguro.
 
-### Comando dh -b
+### dh -b — Handles y Protocolos
 
-Muestra la base de datos de Handles y Protocolos del sistema.
-![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-04%2001-27-38.png)
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/8333e47c-3a8c-4913-8207-ecc49cfc650e" />
+...
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/b8cf0c99-833d-4dbe-b266-12db9dcd28cc" />
 
+Muestra todos los objetos del sistema UEFI y sus interfaces.
 
-### Comando memmap -b
+### memmap -b — Mapa de memoria
 
-Muestra el mapa de memoria. Las regiones RuntimeServicesCode
-son críticas para la seguridad.
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/c51e764c-d26b-4624-9252-4c73fc89677c" />
+...
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/99a151bb-fa72-476c-bef5-6cf6d3676fae" />
 
 **Pregunta de Razonamiento 3:** En el mapa de memoria (memmap), existen regiones marcadas como RuntimeServicesCode. ¿Por qué estas áreas son un objetivo principal para los desarrolladores de malware (Bootkits)?
 
@@ -83,9 +90,9 @@ son críticas para la seguridad.
 cuando el SO toma el control. Un Bootkit inyectado ahí opera
 con privilegios Ring -2/SMM invisible para cualquier antivirus.
 
-### Variables NVRAM - dmpstore
+### dmpstore — Variables NVRAM
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/ec5ea690-b599-4460-af37-41b91f379440" />
 
-Muestra variables Boot0000, BootOrder que controlan el arranque.
 
 **Pregunta de Razonamiento 2:** Observando las variables Boot#### y BootOrder, ¿cómo determina el Boot Manager la secuencia de arranque?
 
@@ -94,7 +101,8 @@ Muestra variables Boot0000, BootOrder que controlan el arranque.
 la ruta del .efi a ejecutar.
 
 ### Variable personalizada
-[📸 CAPTURA]
+<img width="960" height="660" alt="image" src="https://github.com/user-attachments/assets/0d990c28-3adb-4305-9b8b-a24acab99042" />
+
 
     set TestSeguridad "Hola UEFI"
     set -v
@@ -103,20 +111,7 @@ la ruta del .efi a ejecutar.
 
 ## Parte 2 - Desarrollo de la Aplicación UEFI
 
-### ¿Qué hace la aplicación?
-
-La aplicación es un Hello World nativo UEFI que:
-1. Imprime un mensaje usando OutputString de la SystemTable
-2. Crea un byte con valor 0xCC (opcode de INT3 = breakpoint)
-3. Verifica si el byte es 0xCC e imprime un segundo mensaje
-
-**Pregunta de Razonamiento 4:** ¿Por qué utilizamos SystemTable->ConOut->OutputString en lugar de la función printf de C?
-
-**Respuesta** No existe printf porque en el entorno
-pre-OS de UEFI no hay sistema operativo ni libc. Toda la E/S
-se hace a través de protocolos de la SystemTable.
-
-### Código fuente (aplicacion.c)
+### Código fuente
 
     #include <efi.h>
     #include <efilib.h>
@@ -137,6 +132,17 @@ se hace a través de protocolos de la SystemTable.
         return EFI_SUCCESS;
     }
 
+**Pregunta de Razonamiento 4:** ¿Por qué utilizamos SystemTable->ConOut->OutputString en lugar de la función printf de C?
+
+**Respuesta** No existe printf porque en el entorno
+pre-OS de UEFI no hay sistema operativo ni libc. Toda la E/S
+se hace a través de protocolos de la SystemTable.
+
+**¿Por qué 0xCC?**
+Es el opcode de INT3 — un breakpoint de software. El código
+demuestra cómo detectarlo estáticamente, relevante en análisis
+de firmware malicioso.
+
 ---
 
 ## Parte 3 - Compilación
@@ -149,18 +155,14 @@ se hace a través de protocolos de la SystemTable.
         -mno-red-zone -maccumulate-outgoing-args
         -Wall -c -o aplicacion.o aplicacion.c
 
-Genera aplicacion.o — el código objeto.
-
-### Paso 2 - Linkear con bibliotecas UEFI
+### Paso 2 - Linkear con UEFI
 
     ld -shared -Bsymbolic -L/usr/lib -L/usr/lib/efi
         -T /usr/lib/elf_x86_64_efi.lds
         /usr/lib/crt0-efi-x86_64.o
         aplicacion.o -o aplicacion.so -lefi -lgnuefi
 
-Une el objeto con las bibliotecas UEFI.
-
-### Paso 3 - Convertir a formato PE/COFF
+### Paso 3 - Convertir a PE/COFF
 
     objcopy -j .text -j .sdata -j .data
         -j .dynamic -j .dynsym
@@ -168,22 +170,22 @@ Une el objeto con las bibliotecas UEFI.
         --target=efi-app-x86_64
         aplicacion.so aplicacion.efi
 
-Convierte al formato PE/COFF que usa UEFI.
+### Verificación
+<img width="1366" height="728" alt="image" src="https://github.com/user-attachments/assets/ac697742-89e2-4d93-9bfa-900c691543b5" />
 
-### Verificación del formato
 
     file aplicacion.efi
+    → PE32+ executable (EFI application) x86-64
 
-
-
-**¿Qué es PE/COFF?** Es el formato de ejecutable de Windows.
-UEFI lo usa aunque compilemos desde Linux porque es portable.
+**¿Qué es PE/COFF?**
+Formato de ejecutable de Windows. UEFI lo usa aunque compilemos
+desde Linux porque es portable entre arquitecturas.
 
 ---
 
 ## Parte 4 - Ejecución en QEMU
 
-Se creó una imagen de disco FAT32:
+Se creó una imagen FAT32 con la shell UEFI y la aplicación:
 
     dd if=/dev/zero of=disco.img bs=1M count=64
     mkfs.vfat -F 32 disco.img
@@ -193,48 +195,39 @@ Se creó una imagen de disco FAT32:
     sudo cp aplicacion.efi mnt/
     sudo umount mnt
 
-Se ejecutó QEMU con firmware UEFI:
-
     qemu-system-x86_64 \
         -bios /usr/share/ovmf/OVMF.fd \
         -drive format=raw,file=disco.img,if=virtio \
         -net none
 
-### Ejecución del HelloWorld.efi del repositorio
+### HelloWorld.efi del repositorio UEFI-Lessons
+<img width="1280" height="860" alt="image" src="https://github.com/user-attachments/assets/1e41ce0c-d851-4208-b319-3a8709f1223c" />
 
-Se utilizó el HelloWorld.efi del repositorio UEFI-Lessons
-compilado con EDK2 para verificar el correcto funcionamiento
-del entorno:
 
     fs0:
     HelloWorld.efi
-![1](https://github.com/GustavoRegnicoli/noTengoGrupo-SdC/blob/main/tp3_uefi/capturas/Captura%20de%20pantalla%20de%202026-05-06%2002-41-13.png)
+
+Se utilizó el HelloWorld.efi del repositorio UEFI-Lessons
+compilado con EDK2 para verificar el correcto funcionamiento
+del entorno UEFI en QEMU.
 
 ### Problema con aplicacion.efi compilada con gnu-efi
 
-Al intentar ejecutar nuestra aplicación compilada con gnu-efi:
-
-    fs0:
-    aplicacion.efi
-
-La aplicación se congela. Esto se debe a un problema de
-compatibilidad conocido entre gnu-efi y la consola virtio
-de QEMU. El archivo aplicacion.efi fue verificado como
-PE32+ válido con el comando file, confirmando que la
-compilación fue exitosa. El problema es de runtime en el
-entorno de emulación específico.
+Al intentar ejecutar aplicacion.efi la aplicación se congela.
+Esto se debe a un problema de compatibilidad conocido entre
+gnu-efi y la consola virtio de QEMU. El archivo fue verificado
+como PE32+ válido — la compilación fue exitosa pero hay una
+incompatibilidad de runtime con el entorno de emulación.
 
 ---
 
 ## Análisis de seguridad
 
-**Pregunta de Razonamiento 5:** En el pseudocódigo de Ghidra, la condición 0xCC suele aparecer como -52. ¿A qué se debe este fenómeno y por qué importa en ciberseguridad?
-
-**Respuesta** El compilador interpreta char como
-entero con signo. En complemento a dos de 8 bits, 0xCC (204)
-equivale a -52. Esto es crítico en ciberseguridad porque una
-regla YARA que busque 204 fallaría — hay que buscar el byte
-0xCC directamente.
+**Pregunta 5:** ¿Por qué 0xCC aparece como -52 en Ghidra?
+El compilador interpreta char como entero con signo. En
+complemento a dos de 8 bits, 0xCC (204) equivale a -52.
+Esto es crítico en ciberseguridad porque una regla YARA
+que busque 204 fallaría — hay que buscar el byte 0xCC.
 
 ---
 
@@ -245,7 +238,7 @@ regla YARA que busque 204 fallaría — hay que buscar el byte
 - Las aplicaciones UEFI se compilan en formato PE/COFF
 - UEFI ejecuta código antes que cualquier sistema operativo
 - Las variables NVRAM controlan la secuencia de arranque
-- La memoria RuntimeServices persiste después de cargar el SO
-  siendo objetivo de malware persistente como Bootkits
-- gnu-efi permite compilar aplicaciones UEFI desde Linux pero
-  puede tener incompatibilidades con ciertos entornos de QEMU
+- RuntimeServices persiste después de cargar el SO siendo
+  objetivo de Bootkits y malware persistente
+- gnu-efi permite compilar desde Linux pero puede tener
+  incompatibilidades con ciertos entornos de QEMU
