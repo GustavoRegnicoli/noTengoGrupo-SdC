@@ -1,0 +1,8 @@
+qemu-raspi/
+driver/*.o
+driver/*.ko
+driver/*.mod*
+driver/*.order
+driver/*.symvers
+driver/.*.cmd
+driver/.tmp_versions/
