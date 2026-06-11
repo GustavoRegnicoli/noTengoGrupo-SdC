@@ -1,6 +1,6 @@
 obj-m += CDD.o
 
-# Esta línea deshabilita por completo el profiling/ftrace que genera el __gnu_mcount_nc
+# Esta bandera es obligatoria para evitar el error __gnu_mcount_nc en ARMv6
 ccflags-y := -fno-optimize-sibling-calls
 
 all:
